@@ -1,102 +1,134 @@
-use dojo_starter::models::Direction;
-use dojo_starter::models::Position;
 
-// define the interface
-#[starknet::interface]
-trait IActions<T> {
-    fn spawn(ref self: T);
-    fn move(ref self: T, direction: Direction);
-}
 
-// dojo decorator
+// actions.cairo
 #[dojo::contract]
-pub mod actions {
-    use super::{IActions, next_position};
-    use starknet::{ContractAddress, get_caller_address};
-    use dojo_starter::models::{Position, Vec2, Moves, Direction, DirectionsAvailable};
+mod actions {
+    use super::*;
+    use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
+    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use cartridge_vrf::vrf::{Request, Response, IRandomness};
 
-    use dojo::model::{ModelStorage, ModelValueStorage};
-    use dojo::event::EventStorage;
+    const WIN_PROBABILITY: u32 = 30;
+    const LORDS_AMOUNT: u256 = 100_000_000_000_000_000_000;
 
-    #[derive(Copy, Drop, Serde)]
-    #[dojo::event]
-    pub struct Moved {
-        #[key]
-        pub player: ContractAddress,
-        pub direction: Direction,
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        GameStarted: GameStarted,
+        GameCompleted: GameCompleted,
     }
 
-    #[abi(embed_v0)]
-    impl ActionsImpl of IActions<ContractState> {
-        fn spawn(ref self: ContractState) {
-            // Get the default world. 
-            let mut world = self.world(@"dojo_starter");
-
-            // Get the address of the current caller, possibly the player's address.
-            let player = get_caller_address();
-            // Retrieve the player's current position from the world.
-            let mut position: Position = world.read_model(player);
-
-            // Update the world state with the new data.
-
-            // 1. Move the player's position 10 units in both the x and y direction.
-            let new_position = Position {
-                player, vec: Vec2 { x: position.vec.x + 10, y: position.vec.y + 10 }
-            };
-
-            // Write the new position to the world.
-            world.write_model(@new_position);
-            
-            // 2. Set the player's remaining moves to 100.
-            let moves = Moves { 
-                player, remaining: 100, last_direction: Direction::None(()), can_move: true
-            };
-
-            // Write the new moves to the world.
-            world.write_model(@moves);
-        }
-
-        // Implementation of the move function for the ContractState struct.
-        fn move(ref self: ContractState, direction: Direction) {
-            // Get the address of the current caller, possibly the player's address.
-
-            let mut world = self.world(@"dojo_starter");
-
-            let player = get_caller_address();
-
-            // Retrieve the player's current position and moves data from the world.
-            let mut position: Position = world.read_model(player);
-            let mut moves: Moves = world.read_model(player);
-
-            // Deduct one from the player's remaining moves.
-            moves.remaining -= 1;
-
-            // Update the last direction the player moved in.
-            moves.last_direction = direction;
-
-            // Calculate the player's next position based on the provided direction.
-            let next = next_position(position, direction);
-
-            // Write the new position to the world.
-            world.write_model(@next);
-
-            // Write the new moves to the world.
-            world.write_model(@moves);
-          
-            // Emit an event to the world to notify about the player's move.
-            world.emit_event(@Moved { player, direction });
-        }
+    #[derive(Drop, starknet::Event)]
+    struct GameStarted {
+        game_id: u64,
+        player: ContractAddress,
+        timestamp: u64
     }
-}
 
-// Define function like this:
-fn next_position(mut position: Position, direction: Direction) -> Position {
-    match direction {
-        Direction::None => { return position; },
-        Direction::Left => { position.vec.x -= 1; },
-        Direction::Right => { position.vec.x += 1; },
-        Direction::Up => { position.vec.y -= 1; },
-        Direction::Down => { position.vec.y += 1; },
-    };
-    position
+    #[derive(Drop, starknet::Event)]
+    struct GameCompleted {
+        game_id: u64,
+        player: ContractAddress,
+        won: bool
+    }
+
+    #[storage]
+    struct Storage {
+        game_counter: u64,
+        lords_token: IERC20Dispatcher,
+        treasury: ContractAddress,
+        vrf: IRandomness
+    }
+
+    #[external(v0)]
+    fn play_game(
+        ref self: ContractState,
+        commands: Commands,
+        world: IWorldDispatcher
+    ) -> bool {
+        let caller = get_caller_address();
+        
+        // Transfer LORDS tokens to treasury
+        let lords = self.lords_token.read();
+        lords.transfer_from(caller, self.treasury.read(), LORDS_AMOUNT);
+
+        // Create new game
+        let game_id = self.game_counter.read();
+        let game = Game::new(game_id, caller, LORDS_AMOUNT);
+        commands.write(game);
+        
+        // Emit game started event
+        emit!(
+            world,
+            GameStarted {
+                game_id,
+                player: caller,
+                timestamp: get_block_timestamp()
+            }
+        );
+
+        // Get random number from VRF
+        let request = Request {
+            caller,
+            seed: game_id,
+            callback_addr: starknet::get_contract_address(),
+            num_words: 1,
+        };
+        
+        let response = self.vrf.read().request_random(request);
+        let random_number = response.random_words[0] % 100;
+        
+        // Determine if player won
+        let won = random_number < WIN_PROBABILITY;
+        
+        // Update game state
+        let mut game = commands.read::<Game>(game_id);
+        game.won = won;
+        game.completed = true;
+        commands.write(game);
+
+        // Update player stats
+        let mut player = commands.read::<Player>(caller);
+        player.total_games_played += 1;
+        player.total_spent += LORDS_AMOUNT;
+        
+        if won {
+            player.total_games_won += 1;
+        }
+        
+        commands.write(player);
+        
+        // Increment game counter
+        self.game_counter.write(game_id + 1);
+        
+        // Emit game completion event
+        emit!(
+            world,
+            GameCompleted {
+                game_id,
+                player: caller,
+                won
+            }
+        );
+
+        won
+    }
+
+    #[external(v0)]
+    fn get_player_stats(
+        self: @ContractState,
+        world: IWorldDispatcher,
+        username: felt252
+    ) -> Player {
+        commands.read::<Player>(username)
+    }
+
+    #[external(v0)]
+    fn get_game(
+        self: @ContractState,
+        world: IWorldDispatcher,
+        game_id: u64
+    ) -> Game {
+        commands.read::<Game>(game_id)
+    }
 }

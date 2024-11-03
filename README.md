@@ -1,65 +1,8 @@
-![Dojo Starter](./assets/cover.png)
+'Rugged' is a rug project trading simulator where the players are the ruggers. Hold and earn or rug and leave wiv da bag!
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/mark-dark.svg">
-  <img alt="Dojo logo" align="right" width="120" src=".github/mark-light.svg">
-</picture>
+Phase 1 is a quick thrill gamble with a 30% chance of success. Winning players then enter the fray and strategically plan how to maximise both their purse size and collateral damage radius.
 
-<a href="https://twitter.com/dojostarknet">
-<img src="https://img.shields.io/twitter/follow/dojostarknet?style=social"/>
-</a>
-<a href="https://github.com/dojoengine/dojo">
-<img src="https://img.shields.io/github/stars/dojoengine/dojo?style=social"/>
-</a>
+Background
 
-[![discord](https://img.shields.io/badge/join-dojo-green?logo=discord&logoColor=white)](https://discord.gg/PwDa2mKhR4)
-[![Telegram Chat][tg-badge]][tg-url]
+Average Sosij & Lord Cumberlord, victors in Realms.World's most recent Frontinus House round for their upcoming game 'Fallen Order', team up with Dojo Basecamp alumni, DeusVult & Odinson, and to bring you 'Rugged'.
 
-[tg-badge]: https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fdojoengine
-[tg-url]: https://t.me/dojoengine
-
-# Dojo Starter: Official Guide
-
-A quickstart guide to help you build and deploy your first Dojo provable game.
-
-Read the full tutorial [here](https://dojoengine.org/tutorial/dojo-starter).
-
-## Running Locally
-
-#### Terminal one (Make sure this is running)
-
-```bash
-# Run Katana
-katana --disable-fee --allowed-origins "*"
-```
-
-#### Terminal two
-
-```bash
-# Build the example
-sozo build
-
-# Migrate the example
-sozo migrate
-
-# Start Torii
-# Replace <WORLD_ADDRESS> with the address of the deployed world from the previous step
-torii --world 0x06171ed98331e849d6084bf2b3e3186a7ddf35574dd68cab4691053ee8ab69d7 --allowed-origins "*"
-```
-
----
-
-## Contribution
-
-1. **Report a Bug**
-
-    - If you think you have encountered a bug, and we should know about it, feel free to report it [here](https://github.com/dojoengine/dojo-starter/issues) and we will take care of it.
-
-2. **Request a Feature**
-
-    - You can also request for a feature [here](https://github.com/dojoengine/dojo-starter/issues), and if it's viable, it will be picked for development.
-
-3. **Create a Pull Request**
-    - It can't get better then this, your pull request will be appreciated by the community.
-
-Happy coding!
